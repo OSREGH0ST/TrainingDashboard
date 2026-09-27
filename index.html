@@ -1,0 +1,351 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PPL-UL Workout Dashboard</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1e3a8a">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="icon" href="icons/icon-192.png">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: { 500: '#3b82f6', 600: '#2563eb', 900: '#1e3a8a' }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased" x-data="workoutApp()">
+
+  <div class="flex flex-col md:flex-row min-h-screen">
+    <!-- Sidebar Navigation -->
+    <aside class="w-full md:w-64 bg-slate-900 border-b md:border-b-0 md:border-r border-slate-800 p-4 shrink-0">
+      <div class="flex items-center justify-between mb-6">
+        <h1 class="text-xl font-bold text-brand-500 tracking-wide">PPL-UL Tracker</h1>
+        <button @click="resetProgress()" class="text-xs text-rose-400 hover:underline">Reiniciar semana</button>
+      </div>
+
+      <nav class="space-y-1">
+        <template x-for="(day, index) in workoutData" :key="index">
+          <button
+            @click="activeDayIndex = index"
+            :class="activeDayIndex === index ? 'bg-brand-600 text-white font-medium' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'"
+            class="w-full text-left px-3 py-2.5 rounded-lg flex items-center justify-between transition-colors text-sm">
+            <span x-text="day.name"></span>
+            <span
+              x-show="day.type !== 'rest'"
+              :class="getDayCompletion(index) === 100 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-400'"
+              class="text-xs px-2 py-0.5 rounded-full"
+              x-text="`${getDayCompletion(index)}%`">
+            </span>
+          </button>
+        </template>
+      </nav>
+    </aside>
+
+    <!-- Main Content / Dashboard -->
+    <main class="flex-1 p-4 md:p-8 pb-28 overflow-y-auto">
+      <template x-if="activeDay">
+        <div>
+          <!-- Header -->
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 border-b border-slate-800 pb-4">
+            <div>
+              <h2 class="text-2xl font-bold text-white" x-text="activeDay.name"></h2>
+              <p class="text-slate-400 text-sm" x-text="activeDay.focus"></p>
+            </div>
+            <div x-show="activeDay.type !== 'rest'" class="flex items-center gap-3">
+              <div class="text-right">
+                <div class="text-xs text-slate-400">Progreso del día</div>
+                <div class="text-lg font-semibold text-brand-500" x-text="`${getDayCompletion(activeDayIndex)}%`"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Rest Day View -->
+          <template x-if="activeDay.type === 'rest'">
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center max-w-md mx-auto my-12">
+              <div class="text-4xl mb-3">🧠</div>
+              <h3 class="text-lg font-bold text-white mb-2">Descanso Dinámico / Comodín Académico</h3>
+              <p class="text-slate-400 text-sm leading-relaxed">
+                Jornada destinada a la recuperación del SNC, reposición de glucógeno y atención a pendientes universitarios o descansos de estudio.
+              </p>
+            </div>
+          </template>
+
+          <!-- Exercise List View -->
+          <template x-if="activeDay.type !== 'rest'">
+            <div class="space-y-4">
+              <template x-for="(exercise, exIndex) in activeDay.exercises" :key="exIndex">
+                <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-5">
+                  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                    <div>
+                      <h3 class="font-semibold text-white text-base" x-text="exercise.name"></h3>
+                      <div class="text-xs text-slate-400" x-text="`${exercise.pattern} | Descanso: ${exercise.rest}`"></div>
+                    </div>
+                    <div class="flex gap-2 text-xs">
+                      <span class="bg-slate-800 text-slate-300 px-2.5 py-1 rounded-md border border-slate-700" x-text="`Reps: ${exercise.reps}`"></span>
+                      <span class="bg-slate-800 text-brand-400 px-2.5 py-1 rounded-md border border-slate-700 font-medium" x-text="`Target: ${exercise.rir}`"></span>
+                    </div>
+                  </div>
+
+                  <!-- Set Trackers -->
+                  <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 pt-2">
+                    <template x-for="setNum in exercise.sets" :key="setNum">
+                      <button
+                        @click="toggleSet(activeDayIndex, exIndex, setNum)"
+                        :class="isSetCompleted(activeDayIndex, exIndex, setNum)
+                          ? 'bg-emerald-600/20 border-emerald-500 text-emerald-300'
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'"
+                        class="border rounded-lg p-2.5 flex items-center justify-between text-xs transition-all">
+                        <span x-text="`Serie ${setNum}`"></span>
+                        <span x-text="isSetCompleted(activeDayIndex, exIndex, setNum) ? '✓ Completada' : 'Pendiente'"></span>
+                      </button>
+                    </template>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </template>
+        </div>
+      </template>
+    </main>
+  </div>
+
+  <!-- Rest Timer Overlay -->
+  <div
+    x-show="restTimer.active"
+    x-transition
+    class="fixed bottom-0 left-0 right-0 md:left-64 bg-slate-900 border-t border-brand-600 p-4 z-50 shadow-2xl">
+    <div class="max-w-xl mx-auto">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-sm text-slate-400" x-text="restTimer.label"></span>
+        <span class="text-2xl font-bold tabular-nums"
+              :class="restTimer.remaining <= 5 ? 'text-rose-400' : 'text-brand-400'"
+              x-text="formatTime(restTimer.remaining)"></span>
+      </div>
+      <div class="h-2 bg-slate-800 rounded-full overflow-hidden mb-3">
+        <div class="h-full bg-brand-500 transition-all duration-1000 ease-linear"
+             :style="`width: ${(restTimer.remaining / restTimer.total) * 100}%`"></div>
+      </div>
+      <div class="flex gap-2">
+        <button @click="adjustTimer(-15)" class="flex-1 bg-slate-800 hover:bg-slate-700 rounded-lg py-2 text-sm">-15s</button>
+        <button @click="adjustTimer(15)" class="flex-1 bg-slate-800 hover:bg-slate-700 rounded-lg py-2 text-sm">+15s</button>
+        <button @click="skipTimer()" class="flex-1 bg-rose-600/20 text-rose-400 hover:bg-rose-600/30 rounded-lg py-2 text-sm font-medium">Saltar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function workoutApp() {
+      return {
+        activeDayIndex: 0,
+        completedSets: {},
+        restTimer: { active: false, remaining: 0, total: 0, label: '', interval: null },
+
+        init() {
+          const saved = localStorage.getItem('ppl_completed_sets');
+          if (saved) {
+            try { this.completedSets = JSON.parse(saved); } catch (e) {}
+          }
+        },
+
+        get activeDay() {
+          return this.workoutData[this.activeDayIndex];
+        },
+
+        toggleSet(dayIdx, exIdx, setNum) {
+          const key = `${dayIdx}-${exIdx}-${setNum}`;
+          const wasCompleted = !!this.completedSets[key];
+          this.completedSets[key] = !wasCompleted;
+          localStorage.setItem('ppl_completed_sets', JSON.stringify(this.completedSets));
+
+          // Auto-inicia descanso solo al marcar (no al desmarcar), y solo si no es la última serie
+          const exercise = this.workoutData[dayIdx].exercises[exIdx];
+          if (!wasCompleted && setNum < exercise.sets) {
+            this.startRestTimer(exercise.rest, exercise.name);
+          }
+        },
+
+        isSetCompleted(dayIdx, exIdx, setNum) {
+          return !!this.completedSets[`${dayIdx}-${exIdx}-${setNum}`];
+        },
+
+        getDayCompletion(dayIdx) {
+          const day = this.workoutData[dayIdx];
+          if (day.type === 'rest') return 100;
+
+          let totalSets = 0;
+          let doneSets = 0;
+
+          day.exercises.forEach((ex, exIdx) => {
+            totalSets += ex.sets;
+            for (let s = 1; s <= ex.sets; s++) {
+              if (this.isSetCompleted(dayIdx, exIdx, s)) doneSets++;
+            }
+          });
+
+          return totalSets === 0 ? 0 : Math.round((doneSets / totalSets) * 100);
+        },
+
+        resetProgress() {
+          if (confirm('¿Reiniciar todo el progreso guardado de la semana?')) {
+            this.completedSets = {};
+            localStorage.removeItem('ppl_completed_sets');
+            this.skipTimer();
+          }
+        },
+
+        // --- Rest Timer ---
+        startRestTimer(restStr, exerciseName) {
+          const seconds = parseInt(restStr, 10); // "180s" -> 180
+          if (!seconds) return;
+          clearInterval(this.restTimer.interval);
+          this.restTimer.total = seconds;
+          this.restTimer.remaining = seconds;
+          this.restTimer.label = `Descanso — ${exerciseName}`;
+          this.restTimer.active = true;
+
+          this.restTimer.interval = setInterval(() => {
+            this.restTimer.remaining--;
+            if (this.restTimer.remaining <= 0) {
+              this.finishTimer();
+            }
+          }, 1000);
+        },
+
+        adjustTimer(delta) {
+          this.restTimer.remaining = Math.max(0, this.restTimer.remaining + delta);
+          this.restTimer.total = Math.max(this.restTimer.total, this.restTimer.remaining);
+        },
+
+        skipTimer() {
+          clearInterval(this.restTimer.interval);
+          this.restTimer.active = false;
+        },
+
+        finishTimer() {
+          clearInterval(this.restTimer.interval);
+          this.restTimer.active = false;
+          if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200]);
+          this.beep();
+        },
+
+        // Beep generado por WebAudio — sin archivo de audio externo, cero costo de red/almacenamiento
+        beep() {
+          try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain); gain.connect(ctx.destination);
+            osc.frequency.value = 880;
+            gain.gain.setValueAtTime(0.15, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+            osc.start(); osc.stop(ctx.currentTime + 0.5);
+          } catch (e) {}
+        },
+
+        formatTime(s) {
+          const m = Math.floor(s / 60);
+          const sec = s % 60;
+          return `${m}:${sec.toString().padStart(2, '0')}`;
+        },
+
+        workoutData: [
+          {
+            name: "Sesión 1: Push",
+            type: "workout",
+            focus: "Pectoral, Hombro Frontal/Lateral, Tríceps",
+            exercises: [
+              { name: "Press Inclinado con Mancuernas", pattern: "Empuje Horizontal Inclinado", sets: 3, reps: "6 - 8", rir: "RIR 1-2", rest: "180s" },
+              { name: "Press Plano en Máquina o Barra", pattern: "Empuje Horizontal Plano", sets: 3, reps: "8 - 10", rir: "RIR 1-2", rest: "120s" },
+              { name: "Elevaciones Laterales con Mancuerna/Polea", pattern: "Abducción de Hombro", sets: 4, reps: "12 - 15", rir: "RIR 0-1", rest: "90s" },
+              { name: "Press Militar Sentado con Mancuernas", pattern: "Empuje Vertical", sets: 2, reps: "8 - 10", rir: "RIR 1-2", rest: "120s" },
+              { name: "Extensión de Tríceps en Polea con Cuerda", pattern: "Extensión de Codo", sets: 3, reps: "10 - 12", rir: "RIR 1", rest: "90s" },
+              { name: "Press Francés con Barra Z", pattern: "Extensión de Codo", sets: 2, reps: "8 - 10", rir: "RIR 1", rest: "90s" }
+            ]
+          },
+          {
+            name: "Sesión 2: Pull",
+            type: "workout",
+            focus: "Espalda, Deltoides Posterior, Bíceps",
+            exercises: [
+              { name: "Jalón al Pecho con Agarre Neutro", pattern: "Tracción Vertical", sets: 3, reps: "8 - 10", rir: "RIR 1-2", rest: "120s" },
+              { name: "Remo con Barra o en Polea Baja", pattern: "Tracción Horizontal", sets: 3, reps: "6 - 8", rir: "RIR 1-2", rest: "180s" },
+              { name: "Face Pulls en Polea con Cuerda", pattern: "Extensión Horizontal / Rotación", sets: 3, reps: "12 - 15", rir: "RIR 0-1", rest: "90s" },
+              { name: "Curl de Bíceps con Barra Z", pattern: "Flexión de Codo", sets: 3, reps: "8 - 10", rir: "RIR 1", rest: "90s" },
+              { name: "Curl Inclinado con Mancuernas", pattern: "Flexión de Codo (Cabeza Larga)", sets: 2, reps: "10 - 12", rir: "RIR 0-1", rest: "90s" }
+            ]
+          },
+          {
+            name: "Sesión 3: Legs",
+            type: "workout",
+            focus: "Cuádriceps, Isquiotibiales, Pantorrilla, Abdomen",
+            exercises: [
+              { name: "Prensa de Piernas o Sentadilla Hack", pattern: "Dominante de Rodilla", sets: 3, reps: "8 - 10", rir: "RIR 1-2", rest: "180s" },
+              { name: "Peso Muerto Rumano con Barra", pattern: "Dominante de Cadera", sets: 3, reps: "8 - 10", rir: "RIR 1-2", rest: "180s" },
+              { name: "Extensión de Cuádriceps en Máquina", pattern: "Aislamiento de Cuádriceps", sets: 3, reps: "10 - 12", rir: "RIR 1", rest: "90s" },
+              { name: "Curl Femoral Tumbado o Sentado", pattern: "Flexión de Rodilla", sets: 3, reps: "10 - 12", rir: "RIR 1", rest: "90s" },
+              { name: "Elevación de Talones De Pie", pattern: "Plantiflexión", sets: 3, reps: "12 - 15", rir: "RIR 0", rest: "60s" },
+              { name: "Crunch Abdominal en Polea Alta", pattern: "Flexión de Tronco", sets: 3, reps: "12 - 15", rir: "RIR 1", rest: "60s" }
+            ]
+          },
+          {
+            name: "Sesión 4: Descanso",
+            type: "rest",
+            focus: "Comodín Académico 1",
+            exercises: []
+          },
+          {
+            name: "Sesión 5: Upper",
+            type: "workout",
+            focus: "Torso Completo",
+            exercises: [
+              { name: "Press de Banca Plano con Barra", pattern: "Empuje Horizontal", sets: 3, reps: "6 - 8", rir: "RIR 1-2", rest: "180s" },
+              { name: "Remo Unilateral con Mancuerna", pattern: "Tracción Horizontal Unilateral", sets: 3, reps: "8 - 10", rir: "RIR 1-2", rest: "120s" },
+              { name: "Cruce de Poleas / Aperturas en Máquina", pattern: "Aducción Horizontal", sets: 2, reps: "12 - 15", rir: "RIR 0-1", rest: "90s" },
+              { name: "Jalón Unilateral en Polea Alta", pattern: "Tracción Vertical Unilateral", sets: 2, reps: "10 - 12", rir: "RIR 1", rest: "90s" },
+              { name: "Elevaciones Laterales en Polea", pattern: "Abducción de Hombro", sets: 3, reps: "12 - 15", rir: "RIR 0-1", rest: "60s" },
+              { name: "Curl Martillo con Mancuernas", pattern: "Flexión de Codo (Braquiorradial)", sets: 3, reps: "10 - 12", rir: "RIR 1", rest: "90s" },
+              { name: "Extensión OverHead de Tríceps", pattern: "Extensión de Codo (Cabeza Larga)", sets: 3, reps: "10 - 12", rir: "RIR 1", rest: "90s" }
+            ]
+          },
+          {
+            name: "Sesión 6: Lower",
+            type: "workout",
+            focus: "Pierna Completa y Cadena Posterior",
+            exercises: [
+              { name: "Sentadilla Búlgara con Mancuernas", pattern: "Dominante de Rodilla Unilateral", sets: 3, reps: "8 - 10", rir: "RIR 1-2", rest: "120s" },
+              { name: "Curl Femoral Sentado", pattern: "Flexión de Rodilla", sets: 2, reps: "10 - 12", rir: "RIR 0-1", rest: "90s" },
+              { name: "Extensión de Cuádriceps en Máquina", pattern: "Aislamiento de Cuádriceps", sets: 2, reps: "12 - 15", rir: "RIR 0-1", rest: "90s" },
+              { name: "Hip Thrust con Barra o Máquina", pattern: "Extensión de Cadera", sets: 3, reps: "8 - 10", rir: "RIR 1-2", rest: "120s" },
+              { name: "Elevación de Talones Sentado", pattern: "Plantiflexión (Sóleo)", sets: 3, reps: "15 - 20", rir: "RIR 0", rest: "60s" },
+              { name: "Elevación de Piernas Colgado", pattern: "Flexión de Cadera / Abdomen", sets: 3, reps: "12 - 15", rir: "RIR 1", rest: "60s" }
+            ]
+          },
+          {
+            name: "Sesión 7: Descanso",
+            type: "rest",
+            focus: "Comodín Académico 2",
+            exercises: []
+          }
+        ]
+      };
+    }
+  </script>
+</body>
+</html>
